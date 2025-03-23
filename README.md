@@ -19,8 +19,9 @@ cd SmartPhone-Recommendation-System
 
 ### 2️⃣ Install Dependencies
 Ensure you have Python installed. Then, run:
-
-```pip install -r requirements.txt```
+```
+pip install -r requirements.txt
+```
 ### 3️⃣ Run the Application
 ```
 streamlit run RSproject.py
@@ -29,10 +30,10 @@ This will launch the web app in your default browser.
 
 ### 🛠 Usage
 
-Select a Smartphone: Use the sidebar dropdown to choose a phone.
+- Select a Smartphone: Use the sidebar dropdown to choose a phone.
+- Choose a Feature: Pick a feature (e.g., price, battery, RAM) for recommendations.
+- Set Number of Recommendations: Use the slider to select how many recommendations you want.
+- Get Recommendations: Click "Recommend" to see similar smartphones
 
-Choose a Feature: Pick a feature (e.g., price, battery, RAM) for recommendations.
-
-Set Number of Recommendations: Use the slider to select how many recommendations you want.
-
-Get Recommendations: Click "Recommend" to see similar smartphones
+### 📊 Dataset
+The project uses smartphones_cleaned_v6.csv, which contains detailed smartphone specifications.
