@@ -17,10 +17,8 @@ df['battery_capacity'].fillna(df['battery_capacity'].median(), inplace=True)
 df['num_front_cameras'].fillna(df['num_front_cameras'].mode()[0], inplace=True)
 df = df.drop(columns=["extended_upto"], errors="ignore")
 
-# Create a copy of the original dataframe
 original_df = df.copy()
 
-# Define feature lists
 numerical_features = ['price', 'rating', 'processor_speed', 'battery_capacity',
                       'ram_capacity', 'internal_memory', 'screen_size', 'refresh_rate',
                       'num_rear_cameras', 'num_front_cameras', 'primary_camera_rear',
@@ -32,16 +30,7 @@ key_features = ['price', 'ram_capacity', 'internal_memory', 'battery_capacity', 
 
 
 def recommend_phones(specifications, top_n=5):
-    """
-    Recommend phones based on user specifications
-
-    Parameters:
-    specifications: dict of feature names and target values
-    top_n: number of recommendations to return
-
-    Returns:
-    DataFrame with top_n recommendations
-    """
+  
     # Calculate weighted distance for each phone
     distances = []
 
@@ -56,7 +45,6 @@ def recommend_phones(specifications, top_n=5):
             # Calculate normalized distance for this feature
             feature_distance = abs(row[feature] - target_value) / feature_range
 
-            # Add weighted distance
             distance += feature_distance
 
         distances.append((idx, distance))
@@ -83,38 +71,32 @@ col1, col2 = st.columns([1, 2])
 with col1:
     st.subheader("Set Your Preferences")
 
-    # Get price range
     min_price = int(df['price'].min())
     max_price = int(df['price'].max())
     target_price = st.slider("Price (PKR)", min_price, max_price,
                              value=int((min_price + max_price) / 2),
                              step=1000)
 
-    # Get RAM capacity
     ram_options = sorted(df['ram_capacity'].unique())
     target_ram = st.selectbox("RAM (GB)", ram_options,
                               index=len(ram_options) // 2)
 
-    # Get internal memory
     memory_options = sorted(df['internal_memory'].unique())
     target_memory = st.selectbox("Storage (GB)", memory_options,
                                  index=len(memory_options) // 2)
 
-    # Get battery capacity
     min_battery = int(df['battery_capacity'].min())
     max_battery = int(df['battery_capacity'].max())
     target_battery = st.slider("Battery Capacity (mAh)", min_battery, max_battery,
                                value=int((min_battery + max_battery) / 2),
                                step=100)
 
-    # Get screen size
     min_screen = float(df['screen_size'].min())
     max_screen = float(df['screen_size'].max())
     target_screen = st.slider("Screen Size (inches)", min_screen, max_screen,
                               value=float((min_screen + max_screen) / 2),
                               step=0.1)
 
-    # Number of recommendations
     top_n = st.slider("Number of recommendations", 1, 10, 5)
 
     # Create specifications dictionary
@@ -141,7 +123,6 @@ with col2:
     if st.session_state.recommendations is not None:
         st.subheader("Recommended Smartphones")
 
-        # Display recommendations in a more visual format
         for i, (idx, row) in enumerate(st.session_state.recommendations.iterrows()):
             with st.expander(f"#{i + 1}: {row['brand_name']} {row['model']} - PKR {int(row['price']):,}"):
                 col_a, col_b = st.columns(2)
@@ -186,12 +167,9 @@ with col2:
         comparison_df = st.session_state.recommendations[['brand_name', 'model', 'price', 'ram_capacity',
                                                           'internal_memory', 'battery_capacity', 'screen_size']]
         st.dataframe(comparison_df, use_container_width=True)
-
-    # Visualizations removed as requested
     else:
         st.info("Set your preferences and click 'Find Phones' to get recommendations.")
 
-# Add some additional information
 st.sidebar.title("About")
 st.sidebar.info(
     """
