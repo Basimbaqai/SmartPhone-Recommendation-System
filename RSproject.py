@@ -1,12 +1,12 @@
 import numpy as np
 import pandas as pd
 import streamlit as st
-import seaborn as sns
-import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 
+# Load the dataset
 df = pd.read_csv("smartphones_cleaned_v6.csv")
 
+# Fill missing values
 df['rating'].fillna(df['rating'].median(), inplace=True)
 df['processor_brand'].fillna(df['processor_brand'].mode()[0], inplace=True)
 df['num_cores'].fillna(df['num_cores'].median(), inplace=True)
@@ -15,72 +15,197 @@ df['primary_camera_front'].fillna(df['primary_camera_front'].median(), inplace=T
 df['processor_speed'].fillna(df['processor_speed'].median(), inplace=True)
 df['battery_capacity'].fillna(df['battery_capacity'].median(), inplace=True)
 df['num_front_cameras'].fillna(df['num_front_cameras'].mode()[0], inplace=True)
-
 df = df.drop(columns=["extended_upto"], errors="ignore")
 
+# Create a copy of the original dataframe
 original_df = df.copy()
 
+# Define feature lists
 numerical_features = ['price', 'rating', 'processor_speed', 'battery_capacity',
                       'ram_capacity', 'internal_memory', 'screen_size', 'refresh_rate',
                       'num_rear_cameras', 'num_front_cameras', 'primary_camera_rear',
                       'primary_camera_front', 'resolution_width']
-
 categorical_features = ['brand_name', 'processor_brand', 'os']
 
-encoder = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
-encoded_categorical = encoder.fit_transform(df[categorical_features])
-encoded_categorical_df = pd.DataFrame(encoded_categorical,
-                                      columns=encoder.get_feature_names_out(categorical_features),
-                                      index=df.index)
-
-sc = StandardScaler()
-scaled_numerical = sc.fit_transform(df[numerical_features])
-scaled_numerical_df = pd.DataFrame(scaled_numerical, columns=numerical_features)
-
-df_processed = pd.concat([scaled_numerical_df, encoded_categorical_df], axis=1)
-
-df_final = df_processed.values
+# Common specs for recommendations - these will be the most relevant features for users
+key_features = ['price', 'ram_capacity', 'internal_memory', 'battery_capacity', 'screen_size']
 
 
-def recommend_by_feature(feature, phone_index, top_n=5, original_df=None):
-    if original_df is None:
-        raise ValueError("Original DataFrame must be provided")
+def recommend_phones(specifications, top_n=5):
+    """
+    Recommend phones based on user specifications
 
-    if feature not in original_df.columns:
-        raise ValueError(f"Feature '{feature}' not found in dataset!")
+    Parameters:
+    specifications: dict of feature names and target values
+    top_n: number of recommendations to return
 
-    query_value = original_df.loc[phone_index, feature]
+    Returns:
+    DataFrame with top_n recommendations
+    """
+    # Calculate weighted distance for each phone
+    distances = []
 
-    similarity_df = original_df.copy()
-    similarity_df["similarity"] = np.abs(similarity_df[feature] - query_value)
+    for idx, row in df.iterrows():
+        distance = 0
+        for feature, target_value in specifications.items():
+            # Normalize the difference by feature range to make features comparable
+            feature_range = df[feature].max() - df[feature].min()
+            if feature_range == 0:  # Avoid division by zero
+                feature_range = 1
 
-    recommended_df = similarity_df.nsmallest(top_n + 1, 'similarity').iloc[1:].copy()
+            # Calculate normalized distance for this feature
+            feature_distance = abs(row[feature] - target_value) / feature_range
 
-    return recommended_df
+            # Add weighted distance
+            distance += feature_distance
 
+        distances.append((idx, distance))
+
+    # Sort by smallest distance (most similar)
+    distances.sort(key=lambda x: x[1])
+
+    # Get the top_n phones
+    top_indices = [idx for idx, _ in distances[:top_n]]
+    recommended_phones = df.loc[top_indices].copy()
+
+    return recommended_phones
+
+
+# Streamlit UI
+st.set_page_config(page_title="Smartphone Finder", layout="wide")
 
 st.title("📱 Smartphone Recommendation System")
-st.sidebar.header("User Selection")
+st.markdown("### Find your perfect smartphone based on specifications")
 
-phone_options = [f"{idx} - {row['model']} (PKR{row['price']})" for idx, row in df.iterrows()]
-selected_phone_option = st.sidebar.selectbox("Select a phone:", phone_options)
+# Create columns for the UI
+col1, col2 = st.columns([1, 2])
 
-phone_index = int(selected_phone_option.split(" - ")[0])
+with col1:
+    st.subheader("Set Your Preferences")
 
-st.write(f"### Selected Phone Details")
-st.write(df.loc[[phone_index]].T)
+    # Get price range
+    min_price = int(df['price'].min())
+    max_price = int(df['price'].max())
+    target_price = st.slider("Price (PKR)", min_price, max_price,
+                             value=int((min_price + max_price) / 2),
+                             step=1000)
 
-feature = st.sidebar.selectbox("Select feature to recommend based on:", numerical_features)
+    # Get RAM capacity
+    ram_options = sorted(df['ram_capacity'].unique())
+    target_ram = st.selectbox("RAM (GB)", ram_options,
+                              index=len(ram_options) // 2)
 
-top_n = st.sidebar.slider("Number of recommendations:", min_value=1, max_value=10, value=5)
+    # Get internal memory
+    memory_options = sorted(df['internal_memory'].unique())
+    target_memory = st.selectbox("Storage (GB)", memory_options,
+                                 index=len(memory_options) // 2)
 
-if st.sidebar.button("Recommend"):
-    recommended_phones = recommend_by_feature(
-        feature=feature,
-        phone_index=phone_index,
-        top_n=top_n,
-        original_df=df
-    )
+    # Get battery capacity
+    min_battery = int(df['battery_capacity'].min())
+    max_battery = int(df['battery_capacity'].max())
+    target_battery = st.slider("Battery Capacity (mAh)", min_battery, max_battery,
+                               value=int((min_battery + max_battery) / 2),
+                               step=100)
 
-    st.write(f"## Recommended Phone Details")
-    st.dataframe(recommended_phones.T)
+    # Get screen size
+    min_screen = float(df['screen_size'].min())
+    max_screen = float(df['screen_size'].max())
+    target_screen = st.slider("Screen Size (inches)", min_screen, max_screen,
+                              value=float((min_screen + max_screen) / 2),
+                              step=0.1)
+
+    # Number of recommendations
+    top_n = st.slider("Number of recommendations", 1, 10, 5)
+
+    # Create specifications dictionary
+    specifications = {
+        'price': target_price,
+        'ram_capacity': target_ram,
+        'internal_memory': target_memory,
+        'battery_capacity': target_battery,
+        'screen_size': target_screen
+    }
+
+    find_button = st.button("Find Phones", type="primary")
+
+# Show recommendations
+if 'recommendations' not in st.session_state:
+    st.session_state.recommendations = None
+
+if find_button:
+    with st.spinner("Finding the best matches..."):
+        recommendations = recommend_phones(specifications, top_n)
+        st.session_state.recommendations = recommendations
+
+with col2:
+    if st.session_state.recommendations is not None:
+        st.subheader("Recommended Smartphones")
+
+        # Display recommendations in a more visual format
+        for i, (idx, row) in enumerate(st.session_state.recommendations.iterrows()):
+            with st.expander(f"#{i + 1}: {row['brand_name']} {row['model']} - PKR {int(row['price']):,}"):
+                col_a, col_b = st.columns(2)
+
+                with col_a:
+                    st.markdown(f"**Brand:** {row['brand_name']}")
+                    st.markdown(f"**Model:** {row['model']}")
+                    st.markdown(f"**Price:** PKR {int(row['price']):,}")
+                    st.markdown(f"**Rating:** {row['rating']:.1f}/5")
+                    st.markdown(f"**OS:** {row['os']}")
+
+                with col_b:
+                    st.markdown(f"**RAM:** {row['ram_capacity']} GB")
+                    st.markdown(f"**Storage:** {row['internal_memory']} GB")
+                    st.markdown(f"**Battery:** {int(row['battery_capacity'])} mAh")
+                    st.markdown(f"**Screen Size:** {row['screen_size']:.1f} inches")
+                    st.markdown(f"**Processor:** {row['processor_brand']}")
+
+                # Show match details
+                st.markdown("#### Match Details")
+                match_data = {}
+                for feature in key_features:
+                    feature_value = row[feature]
+                    target_value = specifications[feature]
+                    if feature == 'price':
+                        feature_value = f"PKR {int(feature_value):,}"
+                        target_value = f"PKR {int(target_value):,}"
+                    elif feature == 'screen_size':
+                        feature_value = f"{feature_value:.1f} inches"
+                        target_value = f"{target_value:.1f} inches"
+                    elif feature == 'battery_capacity':
+                        feature_value = f"{int(feature_value)} mAh"
+                        target_value = f"{int(target_value)} mAh"
+
+                    match_data[feature] = [target_value, feature_value]
+
+                match_df = pd.DataFrame(match_data, index=['Your Preference', 'This Phone'])
+                st.dataframe(match_df.T, use_container_width=True)
+
+        # Show comparison of all recommendations
+        st.subheader("Compare All Recommendations")
+        comparison_df = st.session_state.recommendations[['brand_name', 'model', 'price', 'ram_capacity',
+                                                          'internal_memory', 'battery_capacity', 'screen_size']]
+        st.dataframe(comparison_df, use_container_width=True)
+
+    # Visualizations removed as requested
+    else:
+        st.info("Set your preferences and click 'Find Phones' to get recommendations.")
+
+# Add some additional information
+st.sidebar.title("About")
+st.sidebar.info(
+    """
+    This smartphone recommendation system helps you find the 
+    perfect phone based on your preferred specifications.
+
+    Simply set your preferences for key features like price,
+    RAM, storage, battery capacity, and screen size to get
+    personalized recommendations.
+    """
+)
+
+# Add dataset statistics
+st.sidebar.title("Dataset Stats")
+st.sidebar.markdown(f"**Total phones:** {len(df)}")
+st.sidebar.markdown(f"**Brands:** {len(df['brand_name'].unique())}")
+st.sidebar.markdown(f"**Price range:** PKR {int(df['price'].min()):,} - PKR {int(df['price'].max()):,}")
